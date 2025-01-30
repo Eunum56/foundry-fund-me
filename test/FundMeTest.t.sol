@@ -11,6 +11,7 @@ contract FundMeTest is Test {
     address USER = makeAddr("user"); //Cheat code for creating a fake user address.
     uint256 constant SEND_VALUE = 0.1 ether; //100000000000000000 wei 17 zeros.
     uint256 constant STARTING_BALANCE = 100 ether;
+    uint256 constant GAS_PRICE = 1;
 
     function setUp() external {
         FundMeScript fundMeScript = new FundMeScript();
@@ -68,8 +69,14 @@ contract FundMeTest is Test {
         uint256 startingFundMeBalance = address(fundMe).balance;
 
         // Act
+        uint256 gasStart = gasleft(); // starts from 1000 gas
+        vm.txGasPrice(GAS_PRICE);
         vm.prank(fundMe.getOwner());
-        fundMe.withdraw();
+        fundMe.withdraw(); // cost 200 gas
+
+        uint256 gasEnd = gasleft(); // return 800 gas
+        uint256 gasUsed = (gasStart - gasEnd) * tx.gasprice;
+        console.log(gasUsed);
 
         // Assert
         uint256 endingOwnerBalance = fundMe.getOwner().balance;
@@ -100,6 +107,34 @@ contract FundMeTest is Test {
         // Act
         vm.startPrank(fundMe.getOwner());
         fundMe.withdraw();
+        vm.stopPrank();
+
+        // Assert
+        assert(address(fundMe).balance == 0);
+        assert(
+            startingFundMeBalance + startingOwnerBalance ==
+                fundMe.getOwner().balance
+        );
+    }
+
+    function testWithdrawFromMultipleFundersCheaper() public {
+        // Arrange
+        uint160 numberOfFunders = 10;
+        uint160 startingIndexOfFunders = 1;
+
+        for (uint160 i = startingIndexOfFunders; i < numberOfFunders; i++) {
+            // vm.prank new address
+            // vm.deal new address
+            // address()
+            hoax(address(i), SEND_VALUE); // hoax creates a new user and adds some balance i guess.
+            fundMe.fund{value: SEND_VALUE}();
+        }
+        uint256 startingOwnerBalance = fundMe.getOwner().balance;
+        uint256 startingFundMeBalance = address(fundMe).balance;
+
+        // Act
+        vm.startPrank(fundMe.getOwner());
+        fundMe.cheaperWithdraw();
         vm.stopPrank();
 
         // Assert
